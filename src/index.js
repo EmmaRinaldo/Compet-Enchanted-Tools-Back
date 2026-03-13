@@ -30,7 +30,7 @@ app.use(
       "https://compet-enchanted-tools-front.vercel.app",
     ],
     credentials: true,
-  });
+  }),
 );
 app.use(express.json());
 
