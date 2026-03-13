@@ -26,7 +26,7 @@ app.use(
     origin: [
       "*",
     ], // admin + front visiteur
-    credentials: true,
+    credentials: false,
   }),
 );
 app.use(express.json());
