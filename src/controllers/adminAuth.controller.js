@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const Admin = require('../models/Admin');
+const supabase = require('../lib/supabase');
 
 const TOKEN_COOKIE_NAME = 'admin_session';
 
@@ -24,19 +24,33 @@ async function login(req, res) {
   }
 
   try {
-    const admin = await Admin.findOne({ email }).lean();
+    const { data: admin, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase lors de la récupération de l’admin', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la connexion',
+      });
+    }
+
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Identifiants invalides' });
     }
 
-    const isValid = await bcrypt.compare(password, admin.passwordHash);
+    const isValid = await bcrypt.compare(password, admin.password_hash);
     if (!isValid) {
       return res.status(401).json({ success: false, message: 'Identifiants invalides' });
     }
 
     const token = jwt.sign(
       {
-        sub: admin._id.toString(),
+        sub: admin.id,
         email: admin.email,
         role: admin.role || 'admin',
       },

@@ -2,8 +2,8 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const supabase = require('./lib/supabase');
 
 // Swagger est optionnel pour le MVP : on essaie de le charger, sinon on continue sans casser l'app
 let swaggerUi;
@@ -23,7 +23,7 @@ const app = express();
 // Middlewares
 app.use(
   cors({
-    origin: ["http://localhost:3000"], // origine de ton admin
+    origin: ["http://localhost:3000", "http://localhost:3001"], // admin + front visiteur
     credentials: true,
   }),
 );
@@ -37,22 +37,27 @@ if (swaggerUi && swaggerSpec) {
 // Routes API
 const modulesRouter = require('./routes/modules.routes');
 const adminAuthRouter = require('./routes/adminAuth.routes');
+const robotPartsRouter = require('./routes/robotParts.routes');
+const gamesRouter = require('./routes/games.routes');
+const robotPartVariantsRouter = require('./routes/robotPartVariants.routes');
+const robotLayoutRouter = require('./routes/robotLayout.routes');
+const uploadsRouter = require('./routes/uploads.routes');
 app.use('/api/modules', modulesRouter);
 app.use('/api/admin', adminAuthRouter);
+app.use('/api/robot-parts', robotPartsRouter);
+app.use('/api/games', gamesRouter);
+app.use('/api/robot-part-variants', robotPartVariantsRouter);
+app.use('/api/robot-layout', robotLayoutRouter);
+app.use('/api/uploads', uploadsRouter);
 
 const PORT = process.env.PORT || 4000;
-const MONGODB_URI = process.env.MONGODB_URI;
 
-// Connexion à MongoDB
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => {
-    console.log('✅ Connecté à MongoDB');
-  })
-  .catch((err) => {
-    console.error('❌ Erreur de connexion MongoDB :', err);
-    process.exit(1);
-  });
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '⚠️ SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante(s). Les opérations BDD échoueront.',
+  );
+}
 
 // Routes de base (MVP)
 app.get('/health', (_req, res) => {

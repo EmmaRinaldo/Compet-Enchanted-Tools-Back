@@ -1,24 +1,42 @@
-const Module = require('../models/Module');
+const supabase = require('../lib/supabase');
 
 // GET /api/modules
 async function getModules(req, res) {
   try {
-    const modules = await Module.find({})
-      .sort({ order: 1, number: 1 })
-      .lean();
+    const { data, error } = await supabase
+      .from('modules')
+      .select(
+        'id, number, slug, name, description, image_url, video_url, audio_url, game_id, robot_part, position_x, position_y, is_active, display_order, games(type)',
+      )
+      .order('display_order', { ascending: true })
+      .order('number', { ascending: true });
 
-    const payload = modules.map((m) => ({
-      id: m._id.toString(),
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase GET /api/modules', error);
+      return res
+        .status(500)
+        .json({ success: false, message: 'Erreur serveur lors de la récupération des modules' });
+    }
+
+    const payload = (data || []).map((m) => ({
+      id: m.id,
       number: m.number,
       slug: m.slug,
       name: m.name,
       description: m.description,
-      videoUrl: m.videoUrl,
-      gameType: m.gameType,
-      robotPart: m.robotPart || null,
-      position: m.position,
-      isActive: m.isActive,
-      order: m.order,
+      imageUrl: m.image_url,
+      videoUrl: m.video_url,
+      audioUrl: m.audio_url,
+      gameId: m.game_id,
+      gameType: (m.games && m.games.type) || 'none',
+      robotPart: m.robot_part || null,
+      position: {
+        x: m.position_x,
+        y: m.position_y,
+      },
+      isActive: m.is_active,
+      order: m.display_order,
     }));
 
     res.json(payload);
@@ -39,52 +57,88 @@ async function createModule(req, res) {
       slug,
       name,
       description,
+      imageUrl,
       videoUrl,
-      gameType,
-      gameConfig,
+      audioUrl,
+      gameId,
       robotPart,
       isActive,
     } = req.body || {};
 
-    const last = await Module.findOne({})
-      .sort({ order: -1, number: -1 })
-      .lean();
+    const { data: lastModules, error: lastError } = await supabase
+      .from('modules')
+      .select('number, display_order')
+      .order('display_order', { ascending: false })
+      .order('number', { ascending: false })
+      .limit(1);
+
+    if (lastError) {
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase lors de la récupération du dernier module', lastError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la création du module',
+      });
+    }
+
+    const last = (lastModules && lastModules[0]) || null;
 
     const nextNumber =
       typeof number === 'number' && !Number.isNaN(number)
         ? number
         : (last && typeof last.number === 'number' ? last.number : 0) + 1;
 
-    const module = await Module.create({
-      number: nextNumber,
-      slug,
-      name,
-      description,
-      videoUrl,
-      gameType: gameType || 'none',
-      gameConfig: gameConfig || {},
-      robotPart: robotPart || undefined,
-      isActive: typeof isActive === 'boolean' ? isActive : true,
-      // Position par défaut au centre pour rester compatible avec le layout editor (MVP)
-      position: {
-        x: 50,
-        y: 50,
-      },
-      order: nextNumber,
-    });
+    const { data: createdRows, error: insertError } = await supabase
+      .from('modules')
+      .insert([
+        {
+          number: nextNumber,
+          slug,
+          name,
+          description,
+          image_url: imageUrl || null,
+          video_url: videoUrl || null,
+          audio_url: audioUrl || null,
+          game_id: gameId || null,
+          robot_part: robotPart || null,
+          position_x: 50,
+          position_y: 50,
+          is_active: typeof isActive === 'boolean' ? isActive : true,
+          display_order: nextNumber,
+        },
+      ])
+      .select(
+        'id, number, slug, name, description, image_url, video_url, audio_url, game_id, robot_part, position_x, position_y, is_active, display_order',
+      )
+      .single();
+
+    if (insertError) {
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase lors de la création du module', insertError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la création du module',
+      });
+    }
 
     return res.status(201).json({
-      id: module._id.toString(),
-      number: module.number,
-      slug: module.slug,
-      name: module.name,
-      description: module.description,
-      videoUrl: module.videoUrl,
-      gameType: module.gameType,
-      robotPart: module.robotPart || null,
-      position: module.position,
-      isActive: module.isActive,
-      order: module.order,
+      id: createdRows.id,
+      number: createdRows.number,
+      slug: createdRows.slug,
+      name: createdRows.name,
+      description: createdRows.description,
+      imageUrl: createdRows.image_url,
+      videoUrl: createdRows.video_url,
+      audioUrl: createdRows.audio_url,
+      gameId: createdRows.game_id,
+      gameType: 'none',
+      robotPart: createdRows.robot_part || null,
+      position: {
+        x: createdRows.position_x,
+        y: createdRows.position_y,
+      },
+      isActive: createdRows.is_active,
+      order: createdRows.display_order,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -113,9 +167,10 @@ async function updateModule(req, res) {
     slug,
     name,
     description,
+    imageUrl,
     videoUrl,
-    gameType,
-    gameConfig,
+    audioUrl,
+    gameId,
     robotPart,
     isActive,
   } = req.body || {};
@@ -124,39 +179,58 @@ async function updateModule(req, res) {
 
   if (typeof number === 'number') {
     updates.number = number;
-    updates.order = number;
+    updates.display_order = number;
   }
   if (slug !== undefined) updates.slug = slug;
   if (name !== undefined) updates.name = name;
   if (description !== undefined) updates.description = description;
-  if (videoUrl !== undefined) updates.videoUrl = videoUrl;
-  if (gameType !== undefined) updates.gameType = gameType;
-  if (gameConfig !== undefined) updates.gameConfig = gameConfig;
-  if (robotPart !== undefined) updates.robotPart = robotPart;
-  if (typeof isActive === 'boolean') updates.isActive = isActive;
+  if (imageUrl !== undefined) updates.image_url = imageUrl;
+  if (videoUrl !== undefined) updates.video_url = videoUrl;
+  if (audioUrl !== undefined) updates.audio_url = audioUrl;
+  if (gameId !== undefined) updates.game_id = gameId || null;
+  if (robotPart !== undefined) updates.robot_part = robotPart;
+  if (typeof isActive === 'boolean') updates.is_active = isActive;
 
   try {
-    const updated = await Module.findByIdAndUpdate(id, updates, {
-      new: true,
-      runValidators: true,
-    }).lean();
+    const { data: updated, error } = await supabase
+      .from('modules')
+      .update(updates)
+      .eq('id', id)
+      .select(
+        'id, number, slug, name, description, image_url, video_url, audio_url, game_id, robot_part, position_x, position_y, is_active, display_order',
+      )
+      .single();
 
-    if (!updated) {
-      return res.status(404).json({ success: false, message: 'Module non trouvé' });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ success: false, message: 'Module non trouvé' });
+      }
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase PUT /api/modules/:id', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la mise à jour du module',
+      });
     }
 
     return res.json({
-      id: updated._id.toString(),
+      id: updated.id,
       number: updated.number,
       slug: updated.slug,
       name: updated.name,
       description: updated.description,
-      videoUrl: updated.videoUrl,
-      gameType: updated.gameType,
-      robotPart: updated.robotPart || null,
-      position: updated.position,
-      isActive: updated.isActive,
-      order: updated.order,
+      imageUrl: updated.image_url,
+      videoUrl: updated.video_url,
+      audioUrl: updated.audio_url,
+      gameId: updated.game_id,
+      gameType: 'none',
+      robotPart: updated.robot_part || null,
+      position: {
+        x: updated.position_x,
+        y: updated.position_y,
+      },
+      isActive: updated.is_active,
+      order: updated.display_order,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -173,10 +247,15 @@ async function deleteModule(req, res) {
   const { id } = req.params;
 
   try {
-    const deleted = await Module.findByIdAndDelete(id);
+    const { error } = await supabase.from('modules').delete().eq('id', id);
 
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'Module non trouvé' });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('Erreur Supabase DELETE /api/modules/:id', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la suppression du module',
+      });
     }
 
     return res.status(204).send();
@@ -218,16 +297,15 @@ async function updateModulesLayout(req, res) {
       const clampedX = Math.min(100, Math.max(0, x));
       const clampedY = Math.min(100, Math.max(0, y));
 
-      const result = await Module.findByIdAndUpdate(
-        id,
-        {
-          'position.x': clampedX,
-          'position.y': clampedY,
-        },
-        { new: false },
-      );
+      const { error } = await supabase
+        .from('modules')
+        .update({
+          position_x: clampedX,
+          position_y: clampedY,
+        })
+        .eq('id', id);
 
-      if (result) {
+      if (!error) {
         updatedCount += 1;
       }
     }
@@ -266,14 +344,13 @@ async function updateModulesOrder(req, res) {
         continue;
       }
 
-      await Module.findByIdAndUpdate(
-        id,
-        {
+      await supabase
+        .from('modules')
+        .update({
           number,
-          order: number,
-        },
-        { new: false },
-      );
+          display_order: number,
+        })
+        .eq('id', id);
     }
 
     return res.json({ success: true });
