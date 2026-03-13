@@ -24,10 +24,13 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "*",
-    ], // admin + front visiteur
-    credentials: false,
-  }),
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://compet-enchanted-tools-admin.vercel.app",
+      "https://compet-enchanted-tools-front.vercel.app",
+    ],
+    credentials: true,
+  });
 );
 app.use(express.json());
 
