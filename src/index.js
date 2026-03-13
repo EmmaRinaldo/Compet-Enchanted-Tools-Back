@@ -23,7 +23,7 @@ const app = express();
 // Middlewares
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001"], // admin + front visiteur
+    origin: ["http://localhost:3000", "http://localhost:3001", "https://compet-enchanted-tools-admin.vercel.app/", "https://compet-enchanted-tools-front.vercel.app/"], // admin + front visiteur
     credentials: true,
   }),
 );
