@@ -23,7 +23,9 @@ const app = express();
 // Middlewares
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001", "https://compet-enchanted-tools-admin.vercel.app/", "https://compet-enchanted-tools-front.vercel.app/", "https://compet-enchanted-tools-admin-rmbw7k2z9-emmas-projects-7a07aa96.vercel.app/", "https://compet-enchanted-tools-front-cqgrxrc7g-emmas-projects-7a07aa96.vercel.app/"], // admin + front visiteur
+    origin: [
+      "*",
+    ], // admin + front visiteur
     credentials: true,
   }),
 );
